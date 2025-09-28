@@ -183,6 +183,24 @@ def render_sidebar():
             ["relevance", "hot", "new", "top"],
             help="How to sort Reddit results"
         )
+
+        reddit_include_all = st.checkbox(
+            "Include r/all (broader search)",
+            value=True,
+            help="When enabled, part of the limit is spent searching r/all first to reduce topic bias."
+        )
+
+        reddit_curated_only = st.checkbox(
+            "Limit to curated tech subreddits only",
+            value=False,
+            help="If enabled, skips r/all and only searches a fixed curated list (python, programming, technology, etc.)."
+        )
+
+        extra_curated = st.text_input(
+            "Additional curated subreddits (extend internal list)",
+            placeholder="travel, cooking, health",
+            help="Optional: extend the internal curated list used when no explicit subreddits provided."
+        )
         
         st.write("**GitHub Options**")
         github_repos = st.text_input(
@@ -219,7 +237,10 @@ def render_sidebar():
         "source_params": {
             "reddit": {
                 "subreddits": [s.strip() for s in reddit_subreddits.split(",") if s.strip()] if reddit_subreddits else None,
-                "sort": reddit_sort
+                "sort": reddit_sort,
+                "include_all": reddit_include_all,
+                "curated_only": reddit_curated_only,
+                "extra_curated": [c.strip() for c in extra_curated.split(',') if c.strip()] if extra_curated else []
             },
             "github": {
                 "repositories": [r.strip() for r in github_repos.split(",") if r.strip()] if github_repos else None,

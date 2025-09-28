@@ -59,6 +59,9 @@ class RedditScraper(BaseScraper):
         days_back: int = 30,
         subreddits: Optional[List[str]] = None,
         sort: str = "relevance",
+        include_all: bool = True,
+        curated_only: bool = False,
+        extra_curated: Optional[List[str]] = None,
         **kwargs
     ) -> pd.DataFrame:
         """
@@ -84,7 +87,10 @@ class RedditScraper(BaseScraper):
         
         try:
             # Ensure we have a clean search
-            results = await self._perform_search(query, limit, days_back, subreddits, sort)
+            results = await self._perform_search(
+                query, limit, days_back, subreddits, sort,
+                include_all=include_all, curated_only=curated_only, extra_curated=extra_curated or []
+            )
             return results
         except Exception as e:
             self.logger.error(f"Reddit search encountered an error: {e}")
@@ -96,7 +102,10 @@ class RedditScraper(BaseScraper):
         limit: int,
         days_back: int,
         subreddits: Optional[List[str]],
-        sort: str
+        sort: str,
+        include_all: bool,
+        curated_only: bool,
+        extra_curated: List[str]
     ) -> pd.DataFrame:
         """Perform the actual search using PRAW API."""
         self.logger.info(f"Searching Reddit for '{query}' (limit={limit}, days_back={days_back})")
@@ -129,30 +138,39 @@ class RedditScraper(BaseScraper):
                     except Exception as e:
                         self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
             else:
-                # Broader search strategy: include r/all plus a curated tech list (legacy behavior)
-                curated_subs = ['python', 'programming', 'learnpython', 'technology', 'datascience', 'webdev', 'javascript']
-                # Allocate some portion to r/all first to reduce tech-only bias
-                portion_all = max(5, limit // 3)
-                remaining_limit = max(limit - portion_all, 1)
-                posts_per_curated = max(remaining_limit // len(curated_subs), 2)
+                base_curated = ['python', 'programming', 'learnpython', 'technology', 'datascience', 'webdev', 'javascript']
+                # Merge and dedupe curated lists
+                curated_subs = []
+                for name in base_curated + extra_curated:
+                    if name not in curated_subs:
+                        curated_subs.append(name)
 
                 seen_ids = set()
 
-                # 1. Search r/all
-                try:
-                    subreddit_all = await self.reddit.subreddit('all')
-                    async for submission in subreddit_all.search(query, sort=sort, time_filter=time_filter, limit=portion_all):
-                        post_data = self._extract_post_data(submission)
-                        sid = post_data.get('id')
-                        if sid and sid not in seen_ids:
-                            seen_ids.add(sid)
-                            posts.append(post_data)
-                        if len(posts) >= limit:
-                            break
-                except Exception as e:
-                    self.logger.warning(f"Error searching r/all: {e}")
+                # Strategy matrix based on flags
+                portion_all = 0
+                if include_all and not curated_only:
+                    portion_all = max(5, limit // 3)
 
-                # 2. Curated fallback subreddits (retain original behavior for tech-focused queries)
+                remaining_limit = max(limit - portion_all, 1)
+                posts_per_curated = max(remaining_limit // max(len(curated_subs), 1), 2)
+
+                # 1. r/all phase
+                if portion_all > 0:
+                    try:
+                        subreddit_all = await self.reddit.subreddit('all')
+                        async for submission in subreddit_all.search(query, sort=sort, time_filter=time_filter, limit=portion_all):
+                            post_data = self._extract_post_data(submission)
+                            sid = post_data.get('id')
+                            if sid and sid not in seen_ids:
+                                seen_ids.add(sid)
+                                posts.append(post_data)
+                            if len(posts) >= limit:
+                                break
+                    except Exception as e:
+                        self.logger.warning(f"Error searching r/all: {e}")
+
+                # 2. Curated phase
                 if len(posts) < limit:
                     for subreddit_name in curated_subs:
                         if len(posts) >= limit:
