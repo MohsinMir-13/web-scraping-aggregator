@@ -1,11 +1,11 @@
 """
-Reddit scraper using the official Reddit API via PRAW.
+Reddit scraper using the official Reddit API via AsyncPRAW.
 """
 import asyncio
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 import pandas as pd
-import praw
+import asyncpraw
 from config.settings import API_CONFIG
 from scrapers.base_scraper import BaseScraper
 from utils.logging_utils import get_logger
@@ -18,13 +18,13 @@ class RedditScraper(BaseScraper):
     def __init__(self):
         super().__init__("reddit")
         self.reddit = None
-        self._initialize_client()
+        # Initialization will be done in the first async call
     
-    def _initialize_client(self):
+    async def _initialize_client(self):
         """Initialize Reddit API client."""
         try:
             if API_CONFIG.REDDIT_CLIENT_ID and API_CONFIG.REDDIT_CLIENT_SECRET:
-                self.reddit = praw.Reddit(
+                self.reddit = asyncpraw.Reddit(
                     client_id=API_CONFIG.REDDIT_CLIENT_ID,
                     client_secret=API_CONFIG.REDDIT_CLIENT_SECRET,
                     user_agent=API_CONFIG.REDDIT_USER_AGENT
@@ -33,10 +33,11 @@ class RedditScraper(BaseScraper):
             else:
                 self.logger.warning("Reddit API credentials not found. Using read-only mode.")
                 # Fallback to read-only mode (limited functionality)
-                self.reddit = praw.Reddit(
+                self.reddit = asyncpraw.Reddit(
                     client_id="dummy",
                     client_secret="dummy", 
-                    user_agent=API_CONFIG.REDDIT_USER_AGENT
+                    user_agent=API_CONFIG.REDDIT_USER_AGENT,
+                    check_for_async=False
                 )
         except Exception as e:
             self.logger.error(f"Failed to initialize Reddit client: {e}")
@@ -68,6 +69,10 @@ class RedditScraper(BaseScraper):
         Returns:
             DataFrame with Reddit posts
         """
+        # Initialize client if not already done
+        if not self.reddit:
+            await self._initialize_client()
+        
         if not self.reddit:
             self.logger.error("Reddit client not initialized")
             return pd.DataFrame()

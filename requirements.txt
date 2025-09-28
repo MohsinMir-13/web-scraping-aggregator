@@ -21,7 +21,7 @@ plotly>=5.15.0
 altair>=5.1.0
 
 # API clients
-praw>=7.7.0  # Reddit API
+asyncpraw>=7.7.1  # Async Reddit API (replaces praw for async environments)
 PyGithub>=1.59.0  # GitHub API
 
 # Database (optional)

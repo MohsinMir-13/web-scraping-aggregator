@@ -401,12 +401,20 @@ def render_search_results():
             # Clean the score column - remove NaN and ensure numeric values
             clean_scores = pd.to_numeric(df['score'], errors='coerce').dropna()
             if len(clean_scores) > 0:
-                min_score = st.slider(
-                    "Minimum score",
-                    min_value=int(clean_scores.min()),
-                    max_value=int(clean_scores.max()),
-                    value=int(clean_scores.min())
-                )
+                min_val = int(clean_scores.min())
+                max_val = int(clean_scores.max())
+                # Ensure min_value is less than max_value for slider
+                if min_val < max_val:
+                    min_score = st.slider(
+                        "Minimum score",
+                        min_value=min_val,
+                        max_value=max_val,
+                        value=min_val
+                    )
+                else:
+                    # If all scores are the same, show info and set filter to that value
+                    st.info(f"All posts have the same score: {min_val}")
+                    min_score = min_val
             else:
                 min_score = None
         else:
