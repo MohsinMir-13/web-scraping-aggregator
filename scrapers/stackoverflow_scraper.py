@@ -88,12 +88,12 @@ class StackOverflowScraper(BaseScraper):
             params = {
                 "order": "desc",
                 "sort": "relevance",
-                "q": query,
+                "intitle": query,  # Use intitle instead of q for search endpoint
                 "site": self.site,
                 "pagesize": min(limit, 100),  # API max is 100
                 "fromdate": start_timestamp,
                 "todate": end_timestamp,
-                "filter": "withbody"  # Include question body
+                "filter": "default"  # Use default filter instead of withbody
             }
             
             if tags:

@@ -84,8 +84,10 @@ class ForumScraper(BaseScraper):
             DataFrame with forum posts
         """
         if not forum_urls:
-            self.logger.warning("No forum URLs provided for search")
-            return pd.DataFrame()
+            # Use default forum URLs
+            from config.settings import DEFAULT_FORUM_URLS
+            forum_urls = DEFAULT_FORUM_URLS
+            self.logger.info(f"Using default forum URLs: {len(forum_urls)} forums")
         
         self.logger.info(f"Searching {len(forum_urls)} forums for '{query}' (limit={limit})")
         

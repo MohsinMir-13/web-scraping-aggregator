@@ -90,6 +90,15 @@ DATA_SOURCES = {
     "forums": "Generic Forums"
 }
 
+# Default forum URLs for scraping
+DEFAULT_FORUM_URLS = [
+    "https://news.ycombinator.com",
+    "https://dev.to",
+    "https://hashnode.com",
+    "https://towardsdatascience.com",
+    "https://stackoverflow.com"
+]
+
 # Standard field mapping for normalization
 STANDARD_FIELDS = [
     "source",
