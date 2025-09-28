@@ -1,0 +1,42 @@
+# Core dependencies
+streamlit>=1.28.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# HTTP and async requests
+requests>=2.31.0
+httpx>=0.24.0
+aiohttp>=3.8.0
+
+# HTML parsing
+beautifulsoup4>=4.12.0
+selectolax>=0.3.17
+lxml>=4.9.0
+
+# Browser automation for JS-heavy pages
+playwright>=1.37.0
+
+# Data visualization
+plotly>=5.15.0
+altair>=5.1.0
+
+# API clients
+praw>=7.7.0  # Reddit API
+PyGithub>=1.59.0  # GitHub API
+
+# Database (optional)
+pymongo>=4.5.0
+psycopg2-binary>=2.9.7
+sqlalchemy>=2.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+python-dateutil>=2.8.2
+urllib3>=2.0.0
+
+# Development and testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.7.0
+isort>=5.12.0
