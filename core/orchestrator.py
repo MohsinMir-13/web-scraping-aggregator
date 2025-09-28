@@ -54,6 +54,8 @@ class ScrapingOrchestrator:
         start_time = time.time()
         
         logger.info(f"Starting search for '{query}' across {len(selected_sources)} sources")
+        # Debug: record initial query for transparency
+        logger.debug({"event": "search_start", "query": query, "sources": selected_sources, "limit_per_source": limit_per_source})
         
         if progress_callback:
             progress_callback(0, f"Initializing search for '{query}'...")
@@ -337,11 +339,14 @@ class ScrapingOrchestrator:
                 combo = " ".join(query_words[i:i+2])
                 suggestions.append(f'"{combo}"')
         
-        # Add common technical terms if relevant
-        tech_terms = ["API", "framework", "library", "tutorial", "error", "bug", "fix"]
-        for term in tech_terms:
-            if term.lower() not in query.lower():
-                suggestions.append(f"{query} {term}")
+        # Add common technical terms only if the query appears technical (heuristic)
+        technical_indicators = {"api", "python", "java", "error", "bug", "framework", "code", "library"}
+        query_tokens = set(query_words)
+        if query_tokens & technical_indicators:
+            tech_terms = ["API", "framework", "library", "tutorial", "error", "bug", "fix"]
+            for term in tech_terms:
+                if term.lower() not in query.lower():
+                    suggestions.append(f"{query} {term}")
         
         return suggestions[:10]  # Limit to 10 suggestions
 

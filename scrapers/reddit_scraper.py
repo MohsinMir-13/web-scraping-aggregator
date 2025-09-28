@@ -129,20 +129,46 @@ class RedditScraper(BaseScraper):
                     except Exception as e:
                         self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
             else:
-                # Search across multiple subreddits
-                popular_subs = ['python', 'programming', 'learnpython', 'technology', 'datascience', 'webdev', 'javascript']
-                posts_per_sub = max(limit // len(popular_subs), 3)
+                # Broader search strategy: include r/all plus a curated tech list (legacy behavior)
+                curated_subs = ['python', 'programming', 'learnpython', 'technology', 'datascience', 'webdev', 'javascript']
+                # Allocate some portion to r/all first to reduce tech-only bias
+                portion_all = max(5, limit // 3)
+                remaining_limit = max(limit - portion_all, 1)
+                posts_per_curated = max(remaining_limit // len(curated_subs), 2)
 
-                for subreddit_name in popular_subs:
-                    try:
-                        subreddit = await self.reddit.subreddit(subreddit_name)
-                        async for submission in subreddit.search(query, sort=sort, time_filter=time_filter, limit=posts_per_sub):
-                            post_data = self._extract_post_data(submission)
+                seen_ids = set()
+
+                # 1. Search r/all
+                try:
+                    subreddit_all = await self.reddit.subreddit('all')
+                    async for submission in subreddit_all.search(query, sort=sort, time_filter=time_filter, limit=portion_all):
+                        post_data = self._extract_post_data(submission)
+                        sid = post_data.get('id')
+                        if sid and sid not in seen_ids:
+                            seen_ids.add(sid)
                             posts.append(post_data)
-                            if len(posts) >= limit:
-                                break
-                    except Exception as e:
-                        self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
+                        if len(posts) >= limit:
+                            break
+                except Exception as e:
+                    self.logger.warning(f"Error searching r/all: {e}")
+
+                # 2. Curated fallback subreddits (retain original behavior for tech-focused queries)
+                if len(posts) < limit:
+                    for subreddit_name in curated_subs:
+                        if len(posts) >= limit:
+                            break
+                        try:
+                            subreddit = await self.reddit.subreddit(subreddit_name)
+                            async for submission in subreddit.search(query, sort=sort, time_filter=time_filter, limit=posts_per_curated):
+                                post_data = self._extract_post_data(submission)
+                                sid = post_data.get('id')
+                                if sid and sid not in seen_ids:
+                                    seen_ids.add(sid)
+                                    posts.append(post_data)
+                                if len(posts) >= limit:
+                                    break
+                        except Exception as e:
+                            self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
 
             # Limit results and sort by score (most relevant first)
             # Filter out any empty dicts (extraction failures)
