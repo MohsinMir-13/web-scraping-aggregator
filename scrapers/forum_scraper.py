@@ -95,9 +95,14 @@ class ForumScraper(BaseScraper):
         
         for forum_url in forum_urls:
             try:
+                per_forum_limit = max(3, limit // len(forum_urls))
                 forum_posts = await self._search_forum(
-                    forum_url, query, limit // len(forum_urls), forum_type
+                    forum_url.rstrip('/'), query, per_forum_limit, forum_type
                 )
+                if not forum_posts:
+                    self.logger.debug(f"No posts via recent scrape, trying generic search for {forum_url}")
+                    generic_extra = await self._search_forum_generic(forum_url.rstrip('/'), query, per_forum_limit)
+                    forum_posts.extend(generic_extra)
                 all_posts.extend(forum_posts)
             except Exception as e:
                 self.logger.warning(f"Error searching forum {forum_url}: {e}")
@@ -109,6 +114,8 @@ class ForumScraper(BaseScraper):
         all_posts = all_posts[:limit]
         
         self.logger.info(f"Found {len(all_posts)} forum posts total")
+        if not all_posts:
+            self.logger.debug("Forum scraper returned zero posts. Consider adding more specific forum URLs or relaxing keyword filtering.")
         return pd.DataFrame(all_posts)
     
     async def _search_forum(
@@ -136,25 +143,36 @@ class ForumScraper(BaseScraper):
 
             # Try different selectors for finding posts/threads
             post_selectors = [
-                '.topic-list-item',  # Discourse
-                '.post',  # Generic posts
-                '.thread',  # Forum threads
-                'article',  # Article elements
-                '.discussion',  # Discussion items
-                'h2 a',  # Title links
-                '.title a'  # Title links
+                '.topic-list-item',
+                'tr.topic-list-item',
+                'li.topic-list-item',
+                '.latest-topic-list-item',
+                '.post',
+                '.thread',
+                'article',
+                '.discussion',
+                'h2',
+                'h2 a',
+                '.title a'
             ]
 
             found_posts = []
 
             for selector in post_selectors:
                 elements = soup.select(selector)
-                if elements:
-                    for element in elements[:limit]:
-                        post_data = self._extract_post_from_element(element, forum_url, query)
-                        if post_data:
-                            found_posts.append(post_data)
-                    break  # Use first working selector
+                if not elements:
+                    continue
+                for element in elements[: limit * 2]:
+                    post_data = self._extract_post_from_element(element, forum_url, query)
+                    if post_data:
+                        found_posts.append(post_data)
+                # Do not break immediately; gather from multiple selectors to broaden coverage
+
+            # De-duplicate by URL
+            unique = {}
+            for p in found_posts:
+                unique[p["url"]] = p
+            found_posts = list(unique.values())
 
             # Filter posts that might be related to the query (basic keyword matching)
             relevant_posts = []
@@ -163,11 +181,14 @@ class ForumScraper(BaseScraper):
             for post in found_posts:
                 title_lower = post.get('title', '').lower()
                 body_lower = post.get('body', '').lower()
-
-                # Check if query keywords appear in title or body
+                if not query_lower.strip():
+                    relevant_posts.append(post)
+                    continue
                 if any(word in title_lower or word in body_lower for word in query_lower.split()):
                     relevant_posts.append(post)
 
+            if not relevant_posts:
+                self.logger.debug(f"No keyword matches found on homepage for {forum_url} using query '{query}'")
             posts = relevant_posts[:limit]
 
         except Exception as e:
