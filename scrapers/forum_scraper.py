@@ -129,6 +129,11 @@ class ForumScraper(BaseScraper):
         posts = []
 
         try:
+            # 1. Try Discourse JSON search first (most defaults are Discourse)
+            discourse_posts = await self._search_discourse_json(forum_url, query, limit)
+            if discourse_posts:
+                return discourse_posts[:limit]
+
             # For forums, we'll scrape recent posts instead of searching
             # since most forums don't have good search functionality
             self.logger.info(f"Scraping recent posts from {forum_url}")
@@ -183,9 +188,11 @@ class ForumScraper(BaseScraper):
                 body_lower = post.get('body', '').lower()
                 if not query_lower.strip():
                     relevant_posts.append(post)
-                    continue
-                if any(word in title_lower or word in body_lower for word in query_lower.split()):
-                    relevant_posts.append(post)
+                else:
+                    # Allow partial match: at least one keyword OR fuzzy containment of full query
+                    words = [w for w in query_lower.split() if len(w) > 2]
+                    if any(w in title_lower or w in body_lower for w in words) or query_lower in title_lower:
+                        relevant_posts.append(post)
 
             if not relevant_posts:
                 self.logger.debug(f"No keyword matches found on homepage for {forum_url} using query '{query}'")
@@ -195,6 +202,61 @@ class ForumScraper(BaseScraper):
             self.logger.error(f"Error scraping forum {forum_url}: {e}")
 
         return posts
+
+    async def _search_discourse_json(self, forum_url: str, query: str, limit: int) -> List[Dict[str, Any]]:
+        """Use Discourse /search.json endpoint if available.
+
+        Returns empty list if the forum is not Discourse or search yields nothing.
+        """
+        results: List[Dict[str, Any]] = []
+        try:
+            # Normalize URL (strip trailing slash)
+            base = forum_url.rstrip('/')
+            search_url = f"{base}/search.json?q={requests.utils.quote(query)}"
+            response = self.http_client.get_sync(search_url, headers={"User-Agent": "ForumScraper/1.0"})
+            if not response or response.status_code != 200:
+                return []
+            data = response.json()
+            topics = data.get('topics') or []
+            posts = data.get('posts') or []
+
+            # Index topics by id for metadata
+            topic_index = {t.get('id'): t for t in topics}
+
+            from dateutil import parser as date_parser
+
+            for p in posts:
+                if len(results) >= limit:
+                    break
+                topic_id = p.get('topic_id')
+                topic = topic_index.get(topic_id, {})
+                title = topic.get('title') or p.get('blurb') or 'Topic'
+                cooked = p.get('cooked') or p.get('blurb') or ''
+                # Basic HTML strip for cooked content
+                body = BeautifulSoup(cooked, 'html.parser').get_text().strip()
+                created_raw = p.get('created_at') or topic.get('created_at')
+                try:
+                    created_date = date_parser.parse(created_raw) if created_raw else None
+                except Exception:
+                    created_date = None
+                url = f"{base}/t/{topic.get('slug','')}/{topic_id}" if topic_id else base
+                results.append({
+                    "source": "forums",
+                    "title": title[:500],
+                    "body": body[:2000],
+                    "author": p.get('username') or 'Unknown',
+                    "date": created_date,
+                    "url": url,
+                    "score": topic.get('like_count', 0) or 0,
+                    "forum_url": base
+                })
+
+            if results:
+                self.logger.info(f"Discourse JSON search returned {len(results)} posts for {forum_url}")
+            return results
+        except Exception as e:
+            self.logger.debug(f"Discourse JSON search not usable for {forum_url}: {e}")
+            return []
     
     async def _detect_forum_type(self, forum_url: str) -> str:
         """Try to detect the forum type from the homepage."""
