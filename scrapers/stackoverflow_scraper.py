@@ -88,7 +88,7 @@ class StackOverflowScraper(BaseScraper):
             params = {
                 "order": "desc",
                 "sort": "relevance",
-                "intitle": query,  # Use intitle instead of q for search endpoint
+                "q": query,  # Use q parameter to search in title and body
                 "site": self.site,
                 "pagesize": min(limit, 100),  # API max is 100
                 "fromdate": start_timestamp,

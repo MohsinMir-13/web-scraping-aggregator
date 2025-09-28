@@ -23,10 +23,13 @@ class RedditScraper(BaseScraper):
     async def _initialize_client(self):
         """Initialize Reddit API client."""
         try:
-            # For now, use read-only mode with direct HTTP requests
-            # The provided credentials appear to be username/password, not API credentials
-            self.logger.info("Using Reddit read-only mode via HTTP requests")
-            self.reddit = "read_only"  # Flag to indicate read-only mode
+            self.reddit = asyncpraw.Reddit(
+                client_id=API_CONFIG.REDDIT_CLIENT_ID,
+                client_secret=API_CONFIG.REDDIT_CLIENT_SECRET,
+                user_agent=API_CONFIG.REDDIT_USER_AGENT,
+                read_only=True  # Use read-only mode for safety
+            )
+            self.logger.info("Reddit API client initialized successfully")
         except Exception as e:
             self.logger.error(f"Failed to initialize Reddit client: {e}")
             self.reddit = None
@@ -81,56 +84,49 @@ class RedditScraper(BaseScraper):
         subreddits: Optional[List[str]],
         sort: str
     ) -> pd.DataFrame:
-        """Perform the actual search using HTTP requests in read-only mode."""
+        """Perform the actual search using PRAW API."""
         self.logger.info(f"Searching Reddit for '{query}' (limit={limit}, days_back={days_back})")
-        
+
         try:
-            import aiohttp
-            import json
-            import ssl
-            
             posts = []
-            start_date, end_date = self.get_date_range(days_back)
-            
-            # Create SSL context that handles certificate issues on macOS
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
-            async with aiohttp.ClientSession(connector=connector) as session:
-                if subreddits:
-                    # Search specific subreddits
-                    for subreddit_name in subreddits:
-                        try:
-                            subreddit_posts = await self._search_subreddit_http(
-                                session, subreddit_name, query, limit // len(subreddits), start_date, sort
-                            )
-                            posts.extend(subreddit_posts)
-                        except Exception as e:
-                            self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
-                else:
-                    # Search popular subreddits (since we can't search all of Reddit without API)
-                    popular_subs = ['python', 'programming', 'learnpython', 'technology', 'datascience']
-                    for subreddit_name in popular_subs:
-                        try:
-                            subreddit_posts = await self._search_subreddit_http(
-                                session, subreddit_name, query, max(limit // len(popular_subs), 5), start_date, sort
-                            )
-                            posts.extend(subreddit_posts)
+
+            if subreddits:
+                # Search specific subreddits
+                for subreddit_name in subreddits:
+                    try:
+                        subreddit = await self.reddit.subreddit(subreddit_name)
+                        async for submission in subreddit.search(query, sort=sort, time_filter=f"{days_back}d", limit=limit):
+                            post_data = self._extract_post_data(submission)
+                            posts.append(post_data)
                             if len(posts) >= limit:
                                 break
-                        except Exception as e:
-                            self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
-            
-            # Limit results and sort by date
+                    except Exception as e:
+                        self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
+            else:
+                # Search across multiple subreddits
+                popular_subs = ['python', 'programming', 'learnpython', 'technology', 'datascience', 'webdev', 'javascript']
+                posts_per_sub = max(limit // len(popular_subs), 3)
+
+                for subreddit_name in popular_subs:
+                    try:
+                        subreddit = await self.reddit.subreddit(subreddit_name)
+                        async for submission in subreddit.search(query, sort=sort, time_filter=f"{days_back}d", limit=posts_per_sub):
+                            post_data = self._extract_post_data(submission)
+                            posts.append(post_data)
+                            if len(posts) >= limit:
+                                break
+                    except Exception as e:
+                        self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
+
+            # Limit results and sort by score (most relevant first)
             posts = posts[:limit]
+            posts.sort(key=lambda x: x.get('score', 0), reverse=True)
+
             self.logger.info(f"Found {len(posts)} Reddit posts")
             return pd.DataFrame(posts)
-        
+
         except Exception as e:
             self.logger.error(f"Reddit search failed: {e}")
-            return pd.DataFrame()
             return pd.DataFrame()
     
     async def _search_subreddit_http(

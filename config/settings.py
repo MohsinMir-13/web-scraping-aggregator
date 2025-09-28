@@ -96,7 +96,8 @@ DEFAULT_FORUM_URLS = [
     "https://dev.to",
     "https://hashnode.com",
     "https://towardsdatascience.com",
-    "https://stackoverflow.com"
+    "https://forum.djangoproject.com",  # Django forum
+    "https://discuss.python.org"  # Python forum
 ]
 
 # Standard field mapping for normalization
