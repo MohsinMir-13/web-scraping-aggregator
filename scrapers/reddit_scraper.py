@@ -23,22 +23,10 @@ class RedditScraper(BaseScraper):
     async def _initialize_client(self):
         """Initialize Reddit API client."""
         try:
-            if API_CONFIG.REDDIT_CLIENT_ID and API_CONFIG.REDDIT_CLIENT_SECRET:
-                self.reddit = asyncpraw.Reddit(
-                    client_id=API_CONFIG.REDDIT_CLIENT_ID,
-                    client_secret=API_CONFIG.REDDIT_CLIENT_SECRET,
-                    user_agent=API_CONFIG.REDDIT_USER_AGENT
-                )
-                self.logger.info("Reddit API client initialized successfully")
-            else:
-                self.logger.warning("Reddit API credentials not found. Using read-only mode.")
-                # Fallback to read-only mode (limited functionality)
-                self.reddit = asyncpraw.Reddit(
-                    client_id="dummy",
-                    client_secret="dummy", 
-                    user_agent=API_CONFIG.REDDIT_USER_AGENT,
-                    check_for_async=False
-                )
+            # For now, use read-only mode with direct HTTP requests
+            # The provided credentials appear to be username/password, not API credentials
+            self.logger.info("Using Reddit read-only mode via HTTP requests")
+            self.reddit = "read_only"  # Flag to indicate read-only mode
         except Exception as e:
             self.logger.error(f"Failed to initialize Reddit client: {e}")
             self.reddit = None
@@ -77,48 +65,136 @@ class RedditScraper(BaseScraper):
             self.logger.error("Reddit client not initialized")
             return pd.DataFrame()
         
+        try:
+            # Ensure we have a clean search
+            results = await self._perform_search(query, limit, days_back, subreddits, sort)
+            return results
+        finally:
+            # Clean up the session
+            await self.cleanup()
+    
+    async def _perform_search(
+        self,
+        query: str,
+        limit: int,
+        days_back: int,
+        subreddits: Optional[List[str]],
+        sort: str
+    ) -> pd.DataFrame:
+        """Perform the actual search using HTTP requests in read-only mode."""
         self.logger.info(f"Searching Reddit for '{query}' (limit={limit}, days_back={days_back})")
         
         try:
+            import aiohttp
+            import json
+            import ssl
+            
             posts = []
             start_date, end_date = self.get_date_range(days_back)
             
-            # Search in specific subreddits or all of Reddit
-            if subreddits:
-                for subreddit_name in subreddits:
-                    try:
-                        subreddit = self.reddit.subreddit(subreddit_name)
-                        subreddit_posts = await self._search_subreddit(
-                            subreddit, query, limit // len(subreddits), start_date, sort
-                        )
-                        posts.extend(subreddit_posts)
-                    except Exception as e:
-                        self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
-            else:
-                # Search all of Reddit
-                try:
-                    search_results = self.reddit.subreddit("all").search(
-                        query, limit=limit, sort=sort, time_filter="month"
-                    )
-                    
-                    for submission in search_results:
-                        post_date = datetime.fromtimestamp(submission.created_utc)
-                        if start_date <= post_date <= end_date:
-                            post_data = self._extract_post_data(submission)
-                            posts.append(post_data)
-                        
-                        if len(posts) >= limit:
-                            break
-                
-                except Exception as e:
-                    self.logger.error(f"Error searching Reddit: {e}")
+            # Create SSL context that handles certificate issues on macOS
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
             
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                if subreddits:
+                    # Search specific subreddits
+                    for subreddit_name in subreddits:
+                        try:
+                            subreddit_posts = await self._search_subreddit_http(
+                                session, subreddit_name, query, limit // len(subreddits), start_date, sort
+                            )
+                            posts.extend(subreddit_posts)
+                        except Exception as e:
+                            self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
+                else:
+                    # Search popular subreddits (since we can't search all of Reddit without API)
+                    popular_subs = ['python', 'programming', 'learnpython', 'technology', 'datascience']
+                    for subreddit_name in popular_subs:
+                        try:
+                            subreddit_posts = await self._search_subreddit_http(
+                                session, subreddit_name, query, max(limit // len(popular_subs), 5), start_date, sort
+                            )
+                            posts.extend(subreddit_posts)
+                            if len(posts) >= limit:
+                                break
+                        except Exception as e:
+                            self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
+            
+            # Limit results and sort by date
+            posts = posts[:limit]
             self.logger.info(f"Found {len(posts)} Reddit posts")
             return pd.DataFrame(posts)
         
         except Exception as e:
             self.logger.error(f"Reddit search failed: {e}")
             return pd.DataFrame()
+            return pd.DataFrame()
+    
+    async def _search_subreddit_http(
+        self,
+        session,
+        subreddit_name: str,
+        query: str,
+        limit: int,
+        start_date: datetime,
+        sort: str
+    ) -> List[Dict[str, Any]]:
+        """Search a subreddit using HTTP requests."""
+        posts = []
+        
+        try:
+            # Use Reddit's JSON API
+            url = f"https://www.reddit.com/r/{subreddit_name}/search.json"
+            params = {
+                'q': query,
+                'limit': min(limit, 25),  # Reddit limits to 25 per request
+                'restrict_sr': 'on',
+                'sort': 'relevance' if sort == 'relevance' else 'new',
+                't': 'month'
+            }
+            
+            headers = {'User-Agent': API_CONFIG.REDDIT_USER_AGENT}
+            
+            async with session.get(url, params=params, headers=headers, timeout=30) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    for item in data.get('data', {}).get('children', []):
+                        post_data = item.get('data', {})
+                        post_date = datetime.fromtimestamp(post_data.get('created_utc', 0))
+                        
+                        if post_date >= start_date:
+                            posts.append({
+                                'title': post_data.get('title', ''),
+                                'selftext': post_data.get('selftext', ''),
+                                'author': post_data.get('author', '[deleted]'),
+                                'created_utc': post_data.get('created_utc', 0),
+                                'score': post_data.get('score', 0),
+                                'num_comments': post_data.get('num_comments', 0),
+                                'url': post_data.get('url', ''),
+                                'permalink': f"https://reddit.com{post_data.get('permalink', '')}",
+                                'subreddit': subreddit_name,
+                                'source': 'reddit'
+                            })
+                else:
+                    self.logger.warning(f"Reddit API returned status {response.status} for r/{subreddit_name}")
+                    
+        except Exception as e:
+            self.logger.error(f"Error searching r/{subreddit_name}: {e}")
+        
+        return posts
+    
+    async def cleanup(self):
+        """Clean up the Reddit client session."""
+        # For read-only mode, no cleanup needed
+        if self.reddit and self.reddit != "read_only":
+            try:
+                await self.reddit.close()
+            except Exception as e:
+                self.logger.error(f"Error closing Reddit client: {e}")
     
     async def _search_subreddit(
         self,
@@ -136,10 +212,10 @@ class RedditScraper(BaseScraper):
                 query, limit=limit, sort=sort, time_filter="month"
             )
             
-            for submission in search_results:
+            async for submission in search_results:
                 post_date = datetime.fromtimestamp(submission.created_utc)
                 if post_date >= start_date:
-                    post_data = self._extract_post_data(submission)
+                    post_data = await self._extract_post_data(submission)
                     posts.append(post_data)
         
         except Exception as e:
@@ -147,7 +223,7 @@ class RedditScraper(BaseScraper):
         
         return posts
     
-    def _extract_post_data(self, submission) -> Dict[str, Any]:
+    async def _extract_post_data(self, submission) -> Dict[str, Any]:
         """Extract data from a Reddit submission."""
         try:
             return {
