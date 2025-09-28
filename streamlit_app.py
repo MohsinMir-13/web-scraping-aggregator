@@ -458,16 +458,15 @@ def render_search_results():
         
         # Make URLs clickable
         if 'url' in display_df.columns:
-            display_df['url'] = display_df['url'].apply(
-                lambda x: f'<a href="{x}" target="_blank">🔗 Link</a>' if pd.notna(x) else ''
-            )
+            # Let LinkColumn handle the URL display
+            pass
         
         st.dataframe(
             display_df,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "url": st.column_config.LinkColumn("Link"),
+                "url": st.column_config.LinkColumn("Link", display_text="🔗 Open"),
                 "score": st.column_config.NumberColumn("Score", format="%d"),
                 "source": st.column_config.TextColumn("Source"),
                 "title": st.column_config.TextColumn("Title"),
@@ -621,7 +620,7 @@ def render_analytics():
                 yaxis_title="Frequency",
                 showlegend=False
             )
-            fig.update_xaxis(tickangle=45)
+            fig.update_xaxes(tickangle=45)
             st.plotly_chart(fig, use_container_width=True)
 
 def main():

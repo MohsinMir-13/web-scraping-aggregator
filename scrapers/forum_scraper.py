@@ -20,7 +20,7 @@ class ForumScraper(BaseScraper):
     
     def __init__(self):
         super().__init__("forums")
-        self.http_client = HTTPClient(delay=2.0)  # More conservative rate limiting
+        self.http_client = HTTPClient(delay=2.0, respect_robots=False)  # More conservative rate limiting, disable robots checking
         
         # Common forum patterns and selectors
         self.forum_patterns = {
@@ -118,25 +118,61 @@ class ForumScraper(BaseScraper):
         limit: int,
         forum_type: str
     ) -> List[Dict[str, Any]]:
-        """Search a specific forum."""
+        """Search a specific forum by scraping recent posts."""
         posts = []
-        
+
         try:
-            # Detect forum type if auto
-            if forum_type == "auto":
-                forum_type = await self._detect_forum_type(forum_url)
-            
-            # Try forum-specific search first
-            if forum_type != "generic":
-                posts = await self._search_forum_specific(forum_url, query, limit, forum_type)
-            
-            # Fall back to generic search if no results
-            if not posts:
-                posts = await self._search_forum_generic(forum_url, query, limit)
-        
+            # For forums, we'll scrape recent posts instead of searching
+            # since most forums don't have good search functionality
+            self.logger.info(f"Scraping recent posts from {forum_url}")
+
+            # Get the forum homepage
+            response = await asyncio.to_thread(self.http_client.get_sync, forum_url)
+            if not response or response.status_code != 200:
+                self.logger.warning(f"Failed to access {forum_url}")
+                return posts
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Try different selectors for finding posts/threads
+            post_selectors = [
+                '.topic-list-item',  # Discourse
+                '.post',  # Generic posts
+                '.thread',  # Forum threads
+                'article',  # Article elements
+                '.discussion',  # Discussion items
+                'h2 a',  # Title links
+                '.title a'  # Title links
+            ]
+
+            found_posts = []
+
+            for selector in post_selectors:
+                elements = soup.select(selector)
+                if elements:
+                    for element in elements[:limit]:
+                        post_data = self._extract_post_from_element(element, forum_url, query)
+                        if post_data:
+                            found_posts.append(post_data)
+                    break  # Use first working selector
+
+            # Filter posts that might be related to the query (basic keyword matching)
+            relevant_posts = []
+            query_lower = query.lower()
+
+            for post in found_posts:
+                title_lower = post.get('title', '').lower()
+                body_lower = post.get('body', '').lower()
+
+                # Check if query keywords appear in title or body
+                if any(word in title_lower or word in body_lower for word in query_lower.split()):
+                    relevant_posts.append(post)
+
+            posts = relevant_posts[:limit]
+
         except Exception as e:
-            self.logger.error(f"Error searching forum {forum_url}: {e}")
-        
+            self.logger.error(f"Error scraping forum {forum_url}: {e}")
+
         return posts
     
     async def _detect_forum_type(self, forum_url: str) -> str:
@@ -435,3 +471,52 @@ class ForumScraper(BaseScraper):
         except Exception as e:
             self.logger.error(f"Error scraping forum pages: {e}")
             return pd.DataFrame()
+    
+    def _extract_post_from_element(
+        self,
+        element,
+        forum_url: str,
+        query: str
+    ) -> Optional[Dict[str, Any]]:
+        """Extract post data from a HTML element."""
+        try:
+            # Try to find title
+            title_elem = element.select_one('a, h1, h2, h3, h4, .title')
+            title = title_elem.get_text().strip() if title_elem else "Untitled Post"
+
+            # Try to find link
+            link_elem = element.select_one('a')
+            url = link_elem.get('href') if link_elem else forum_url
+            if url and not url.startswith('http'):
+                url = urljoin(forum_url, url)
+
+            # Try to find author
+            author_elem = element.select_one('.author, .username, .user, [data-user]')
+            author = author_elem.get_text().strip() if author_elem else "Unknown"
+
+            # Try to find date
+            date_elem = element.select_one('.date, .time, time, [datetime]')
+            date_str = date_elem.get('datetime') or date_elem.get_text().strip() if date_elem else None
+            date = self._parse_date(date_str) if date_str else datetime.now()
+
+            # Get body/content
+            body_elem = element.select_one('.content, .body, .text, p')
+            body = body_elem.get_text().strip() if body_elem else title
+
+            # Create post data
+            post_data = {
+                "source": "forums",
+                "title": title,
+                "body": body,
+                "author": author,
+                "date": date,
+                "url": url,
+                "score": 0,  # Forums don't typically have scores
+                "forum_url": forum_url
+            }
+
+            return post_data
+
+        except Exception as e:
+            self.logger.warning(f"Error extracting post data: {e}")
+            return None

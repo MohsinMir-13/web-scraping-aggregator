@@ -45,7 +45,7 @@ class GitHubScraper(BaseScraper):
         limit: int = 50,
         days_back: int = 30,
         repositories: Optional[List[str]] = None,
-        search_type: str = "issues",
+        search_type: str = "community",
         **kwargs
     ) -> pd.DataFrame:
         """
@@ -82,14 +82,19 @@ class GitHubScraper(BaseScraper):
                     except Exception as e:
                         self.logger.warning(f"Error searching repository {repo_name}: {e}")
             else:
-                # Global search
+                # Global search - prioritize community content
                 if search_type == "issues":
+                    # Search for issues that are likely discussions/community content
                     results = await self._search_global_issues(query, limit, start_date)
-                elif search_type == "repositories":
-                    results = await self._search_repositories(query, limit)
                 elif search_type == "discussions":
-                    # Note: GitHub Discussions API is more limited
-                    self.logger.warning("Global discussions search not fully supported. Consider specifying repositories.")
+                    # Search for discussions (GitHub's discussion feature)
+                    results = await self._search_discussions(query, limit, start_date)
+                elif search_type == "community":
+                    # Search across community content: discussions, issues, and community health files
+                    results = await self._search_community_content(query, limit, start_date)
+                else:
+                    # Default to community content
+                    results = await self._search_community_content(query, limit, start_date)
             
             self.logger.info(f"Found {len(results)} GitHub {search_type}")
             return pd.DataFrame(results)
@@ -300,3 +305,93 @@ class GitHubScraper(BaseScraper):
         except Exception as e:
             self.logger.error(f"Error fetching repository issues: {e}")
             return pd.DataFrame()
+    
+    async def _search_discussions(
+        self,
+        query: str,
+        limit: int,
+        start_date: datetime
+    ) -> List[Dict[str, Any]]:
+        """Search for GitHub Discussions (community-focused content)."""
+        discussions = []
+
+        try:
+            # GitHub Discussions are repository-specific, so we need to search popular repos
+            # that are likely to have community discussions
+            community_repos = [
+                "microsoft/vscode",
+                "facebook/react",
+                "tensorflow/tensorflow",
+                "kubernetes/kubernetes",
+                "python/cpython",
+                "nodejs/node",
+                "rust-lang/rust"
+            ]
+
+            discussions_per_repo = max(limit // len(community_repos), 2)
+
+            for repo_name in community_repos:
+                try:
+                    repo = self.github.get_repo(repo_name)
+
+                    # Try to get discussions (this might not work for all repos)
+                    # GitHub API doesn't have a direct discussions search, so we'll look for issues labeled as discussions
+                    issues = repo.get_issues(
+                        state="all",
+                        since=start_date,
+                        labels=["discussion", "question", "help wanted"],
+                        sort="created",
+                        direction="desc"
+                    )
+
+                    count = 0
+                    for issue in issues:
+                        if count >= discussions_per_repo:
+                            break
+
+                        # Filter by query
+                        if (query.lower() in issue.title.lower() or
+                            (issue.body and query.lower() in issue.body.lower())):
+                            discussion_data = self._extract_issue_data(issue)
+                            discussion_data["type"] = "discussion"
+                            discussions.append(discussion_data)
+                            count += 1
+
+                except Exception as e:
+                    self.logger.warning(f"Error searching discussions in {repo_name}: {e}")
+
+            self.logger.info(f"Found {len(discussions)} discussions")
+            return discussions
+
+        except Exception as e:
+            self.logger.error(f"Error searching discussions: {e}")
+            return discussions
+    
+    async def _search_community_content(
+        self,
+        query: str,
+        limit: int,
+        start_date: datetime
+    ) -> List[Dict[str, Any]]:
+        """Search for community content: discussions, issues, and community health files."""
+        community_content = []
+
+        try:
+            # Combine discussions and community-focused issues
+            discussions = await self._search_discussions(query, limit // 2, start_date)
+            community_content.extend(discussions)
+
+            # Also search for issues that are community-focused
+            community_issues = await self._search_global_issues(query, limit // 2, start_date)
+            community_content.extend(community_issues)
+
+            # Sort by date (most recent first)
+            community_content.sort(key=lambda x: x.get('date', datetime.min), reverse=True)
+            community_content = community_content[:limit]
+
+            self.logger.info(f"Found {len(community_content)} community content items")
+            return community_content
+
+        except Exception as e:
+            self.logger.error(f"Error searching community content: {e}")
+            return community_content

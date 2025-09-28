@@ -92,12 +92,11 @@ DATA_SOURCES = {
 
 # Default forum URLs for scraping
 DEFAULT_FORUM_URLS = [
-    "https://news.ycombinator.com",
-    "https://dev.to",
-    "https://hashnode.com",
-    "https://towardsdatascience.com",
     "https://forum.djangoproject.com",  # Django forum
-    "https://discuss.python.org"  # Python forum
+    "https://discuss.python.org",  # Python forum
+    "https://community.rstudio.com",  # RStudio community
+    "https://forums.docker.com",  # Docker forums
+    "https://discourse.jupyter.org"  # Jupyter discourse
 ]
 
 # Standard field mapping for normalization

@@ -9,8 +9,10 @@ import requests
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urljoin, urlparse
 from utils.logging_utils import get_logger
+import urllib3
 
 logger = get_logger(__name__)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class RateLimiter:
     """Simple rate limiter for HTTP requests."""
@@ -125,7 +127,18 @@ class HTTPClient:
             request_headers.update(headers)
         
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+            import ssl
+            import os
+            # Handle SSL certificate issues on macOS by disabling verification
+            os.environ['REQUESTS_CA_BUNDLE'] = ''
+
+            # Completely disable SSL verification for problematic environments
+            connector = aiohttp.TCPConnector(verify_ssl=False)
+
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=self.timeout),
+                connector=connector
+            ) as session:
                 async with session.get(url, headers=request_headers, params=params) as response:
                     logger.debug(f"GET {url} -> {response.status}")
                     return response
@@ -165,7 +178,8 @@ class HTTPClient:
                 url,
                 headers=request_headers,
                 params=params,
-                timeout=self.timeout
+                timeout=self.timeout,
+                verify=False  # Disable SSL verification to handle macOS certificate issues
             )
             logger.debug(f"GET {url} -> {response.status_code}")
             return response

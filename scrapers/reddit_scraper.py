@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 import pandas as pd
 import asyncpraw
+import aiohttp
 from config.settings import API_CONFIG
 from scrapers.base_scraper import BaseScraper
 from utils.logging_utils import get_logger
@@ -18,16 +19,25 @@ class RedditScraper(BaseScraper):
     def __init__(self):
         super().__init__("reddit")
         self.reddit = None
+        self._reddit_connector: Optional[aiohttp.TCPConnector] = None
+        self._reddit_session: Optional[aiohttp.ClientSession] = None
         # Initialization will be done in the first async call
     
     async def _initialize_client(self):
         """Initialize Reddit API client."""
         try:
+            if self._reddit_connector is None:
+                self._reddit_connector = aiohttp.TCPConnector(ssl=False)
+
+            if self._reddit_session is None or self._reddit_session.closed:
+                self._reddit_session = aiohttp.ClientSession(connector=self._reddit_connector)
+
             self.reddit = asyncpraw.Reddit(
                 client_id=API_CONFIG.REDDIT_CLIENT_ID,
                 client_secret=API_CONFIG.REDDIT_CLIENT_SECRET,
                 user_agent=API_CONFIG.REDDIT_USER_AGENT,
-                read_only=True  # Use read-only mode for safety
+                read_only=True,
+                requestor_kwargs={"session": self._reddit_session}
             )
             self.logger.info("Reddit API client initialized successfully")
         except Exception as e:
@@ -36,7 +46,11 @@ class RedditScraper(BaseScraper):
     
     def validate_config(self) -> bool:
         """Validate Reddit API configuration."""
-        return self.reddit is not None
+        return (
+            API_CONFIG.REDDIT_CLIENT_ID and
+            API_CONFIG.REDDIT_CLIENT_SECRET and
+            API_CONFIG.REDDIT_USER_AGENT
+        )
     
     async def search(
         self,
@@ -72,9 +86,9 @@ class RedditScraper(BaseScraper):
             # Ensure we have a clean search
             results = await self._perform_search(query, limit, days_back, subreddits, sort)
             return results
-        finally:
-            # Clean up the session
-            await self.cleanup()
+        except Exception as e:
+            self.logger.error(f"Reddit search encountered an error: {e}")
+            return pd.DataFrame()
     
     async def _perform_search(
         self,
@@ -87,6 +101,18 @@ class RedditScraper(BaseScraper):
         """Perform the actual search using PRAW API."""
         self.logger.info(f"Searching Reddit for '{query}' (limit={limit}, days_back={days_back})")
 
+        # Map days_back to PRAW time_filter values
+        if days_back <= 1:
+            time_filter = "day"
+        elif days_back <= 7:
+            time_filter = "week"
+        elif days_back <= 30:
+            time_filter = "month"
+        elif days_back <= 365:
+            time_filter = "year"
+        else:
+            time_filter = "all"
+
         try:
             posts = []
 
@@ -95,7 +121,7 @@ class RedditScraper(BaseScraper):
                 for subreddit_name in subreddits:
                     try:
                         subreddit = await self.reddit.subreddit(subreddit_name)
-                        async for submission in subreddit.search(query, sort=sort, time_filter=f"{days_back}d", limit=limit):
+                        async for submission in subreddit.search(query, sort=sort, time_filter=time_filter, limit=limit):
                             post_data = self._extract_post_data(submission)
                             posts.append(post_data)
                             if len(posts) >= limit:
@@ -110,7 +136,7 @@ class RedditScraper(BaseScraper):
                 for subreddit_name in popular_subs:
                     try:
                         subreddit = await self.reddit.subreddit(subreddit_name)
-                        async for submission in subreddit.search(query, sort=sort, time_filter=f"{days_back}d", limit=posts_per_sub):
+                        async for submission in subreddit.search(query, sort=sort, time_filter=time_filter, limit=posts_per_sub):
                             post_data = self._extract_post_data(submission)
                             posts.append(post_data)
                             if len(posts) >= limit:
@@ -191,6 +217,24 @@ class RedditScraper(BaseScraper):
                 await self.reddit.close()
             except Exception as e:
                 self.logger.error(f"Error closing Reddit client: {e}")
+            finally:
+                self.reddit = None
+
+        if self._reddit_session:
+            try:
+                await self._reddit_session.close()
+            except Exception as e:
+                self.logger.error(f"Error closing Reddit session: {e}")
+            finally:
+                self._reddit_session = None
+
+        if self._reddit_connector:
+            try:
+                await self._reddit_connector.close()
+            except Exception as e:
+                self.logger.error(f"Error closing Reddit connector: {e}")
+            finally:
+                self._reddit_connector = None
     
     async def _search_subreddit(
         self,

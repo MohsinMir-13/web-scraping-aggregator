@@ -47,12 +47,13 @@ class StackOverflowScraper(BaseScraper):
             DataFrame with Stack Overflow results
         """
         self.logger.info(f"Searching Stack Overflow {search_type} for '{query}' (limit={limit}, days_back={days_back})")
-        
+        query = query.strip()
+
         try:
             start_date, end_date = self.get_date_range(days_back)
             start_timestamp = int(start_date.timestamp())
             end_timestamp = int(end_date.timestamp())
-            
+
             if search_type == "questions":
                 results = await self._search_questions(
                     query, limit, start_timestamp, end_timestamp, tags
@@ -64,10 +65,10 @@ class StackOverflowScraper(BaseScraper):
             else:
                 self.logger.error(f"Unsupported search type: {search_type}")
                 return pd.DataFrame()
-            
+
             self.logger.info(f"Found {len(results)} Stack Overflow {search_type}")
             return pd.DataFrame(results)
-        
+
         except Exception as e:
             self.logger.error(f"Stack Overflow search failed: {e}")
             return pd.DataFrame()
@@ -81,58 +82,55 @@ class StackOverflowScraper(BaseScraper):
         tags: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """Search for questions on Stack Overflow."""
-        questions = []
-        
+        questions: List[Dict[str, Any]] = []
+
         try:
-            # Build API parameters
             params = {
                 "order": "desc",
                 "sort": "relevance",
-                "q": query,  # Use q parameter to search in title and body
+                "q": query,
                 "site": self.site,
-                "pagesize": min(limit, 100),  # API max is 100
-                "fromdate": start_timestamp,
-                "todate": end_timestamp,
-                "filter": "default"  # Use default filter instead of withbody
+                "pagesize": min(limit, 100)
             }
-            
+
+            # Only include date filters when the range is reasonably small to avoid 400 errors
+            days_range = max((end_timestamp - start_timestamp) // 86400, 0)
+            if 0 < days_range <= 180:
+                params["fromdate"] = start_timestamp
+                params["todate"] = end_timestamp
+
             if tags:
                 params["tagged"] = ";".join(tags)
-            
+
             if API_CONFIG.STACKEXCHANGE_KEY:
                 params["key"] = API_CONFIG.STACKEXCHANGE_KEY
-            
-            # Make API request
-            response = requests.get(f"{self.base_url}/search", params=params, timeout=30)
-            response.raise_for_status()
-            
+
+            response = requests.get(f"{self.base_url}/search/advanced", params=params, timeout=30)
+            self._raise_for_status_with_context(response)
             data = response.json()
-            
+
             if "items" in data:
                 for item in data["items"]:
-                    question_data = self._extract_question_data(item)
-                    questions.append(question_data)
-            
-            # Handle pagination if needed
+                    questions.append(self._extract_question_data(item))
+
             page = 2
             while len(questions) < limit and data.get("has_more", False) and page <= 10:
                 params["page"] = page
-                response = requests.get(f"{self.base_url}/search", params=params, timeout=30)
-                response.raise_for_status()
+                response = requests.get(f"{self.base_url}/search/advanced", params=params, timeout=30)
+                self._raise_for_status_with_context(response)
                 data = response.json()
-                
+
                 if "items" in data:
                     for item in data["items"]:
                         if len(questions) >= limit:
                             break
-                        question_data = self._extract_question_data(item)
-                        questions.append(question_data)
-                
+                        questions.append(self._extract_question_data(item))
+
                 page += 1
-        
+
         except Exception as e:
             self.logger.error(f"Error searching Stack Overflow questions: {e}")
-        
+
         return questions
     
     async def _search_answers(
@@ -178,8 +176,7 @@ class StackOverflowScraper(BaseScraper):
                         params=params,
                         timeout=30
                     )
-                    response.raise_for_status()
-                    
+                    self._raise_for_status_with_context(response)
                     data = response.json()
                     if "items" in data:
                         for item in data["items"]:
@@ -287,3 +284,15 @@ class StackOverflowScraper(BaseScraper):
         except Exception as e:
             self.logger.error(f"Error fetching questions by tags: {e}")
             return pd.DataFrame()
+    
+    def _raise_for_status_with_context(self, response: requests.Response) -> None:
+        """Raise HTTPError with additional context from the Stack Exchange API."""
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as http_err:
+            context: Dict[str, Any]
+            try:
+                context = response.json()
+            except ValueError:
+                context = {"raw": response.text[:500]}
+            raise requests.HTTPError(f"{http_err} | details: {context}") from http_err
