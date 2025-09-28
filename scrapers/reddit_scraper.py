@@ -80,6 +80,19 @@ class RedditScraper(BaseScraper):
         # Initialize client if not already done or session got closed
         if not self.reddit or (self._reddit_session and self._reddit_session.closed):
             await self._initialize_client()
+
+        # Guard against detached event loop (Streamlit reruns) causing aiohttp timeout context error
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                self.logger.warning("Detected closed event loop; reinitializing aiohttp session")
+                await self.cleanup()
+                await self._initialize_client()
+        except RuntimeError:
+            # No loop; initialize fresh
+            self.logger.debug("No active event loop found while preparing Reddit search; reinitializing client")
+            await self.cleanup()
+            await self._initialize_client()
         
         if not self.reddit:
             self.logger.error("Reddit client not initialized")

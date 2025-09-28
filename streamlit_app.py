@@ -661,12 +661,19 @@ def main():
         # Search button
         if st.button("🔍 Search", use_container_width=True, type="primary"):
             with st.spinner("Searching across data sources..."):
-                # Run async search
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                success = loop.run_until_complete(perform_search(search_config))
-                loop.close()
-                
+                # Use existing running loop if present; Streamlit may manage one internally
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Schedule the coroutine and wait via asyncio.run_coroutine_threadsafe
+                        fut = asyncio.run_coroutine_threadsafe(perform_search(search_config), loop)
+                        success = fut.result()
+                    else:
+                        success = loop.run_until_complete(perform_search(search_config))
+                except RuntimeError:
+                    # Fallback: no loop set, use asyncio.run
+                    success = asyncio.run(perform_search(search_config))
+
                 if success:
                     st.success("Search completed successfully!")
                     st.balloons()
