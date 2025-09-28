@@ -74,8 +74,8 @@ class RedditScraper(BaseScraper):
         Returns:
             DataFrame with Reddit posts
         """
-        # Initialize client if not already done
-        if not self.reddit:
+        # Initialize client if not already done or session got closed
+        if not self.reddit or (self._reddit_session and self._reddit_session.closed):
             await self._initialize_client()
         
         if not self.reddit:
@@ -145,6 +145,8 @@ class RedditScraper(BaseScraper):
                         self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
 
             # Limit results and sort by score (most relevant first)
+            # Filter out any empty dicts (extraction failures)
+            posts = [p for p in posts if p]
             posts = posts[:limit]
             posts.sort(key=lambda x: x.get('score', 0), reverse=True)
 
@@ -248,14 +250,11 @@ class RedditScraper(BaseScraper):
         posts = []
         
         try:
-            search_results = subreddit.search(
-                query, limit=limit, sort=sort, time_filter="month"
-            )
-            
+            search_results = subreddit.search(query, limit=limit, sort=sort, time_filter="month")
             async for submission in search_results:
                 post_date = datetime.fromtimestamp(submission.created_utc)
                 if post_date >= start_date:
-                    post_data = await self._extract_post_data(submission)
+                    post_data = self._extract_post_data(submission)
                     posts.append(post_data)
         
         except Exception as e:
@@ -263,22 +262,27 @@ class RedditScraper(BaseScraper):
         
         return posts
     
-    async def _extract_post_data(self, submission) -> Dict[str, Any]:
-        """Extract data from a Reddit submission."""
+    def _extract_post_data(self, submission) -> Dict[str, Any]:
+        """Extract data from a Reddit submission.
+
+        This is a synchronous helper returning a plain dict so callers MUST NOT await it.
+        Making it sync avoids accidental creation of unfinished coroutine objects which
+        previously caused: 'coroutine' object has no attribute 'get'.
+        """
         try:
             return {
-                "title": submission.title,
-                "selftext": submission.selftext,
-                "author": str(submission.author) if submission.author else "[deleted]",
-                "created_utc": submission.created_utc,
-                "score": submission.score,
-                "num_comments": submission.num_comments,
-                "url": f"https://reddit.com{submission.permalink}",
-                "subreddit": str(submission.subreddit),
-                "id": submission.id,
+                "title": getattr(submission, "title", ""),
+                "selftext": getattr(submission, "selftext", ""),
+                "author": str(getattr(submission, "author", "[deleted]")) if getattr(submission, "author", None) else "[deleted]",
+                "created_utc": getattr(submission, "created_utc", 0),
+                "score": getattr(submission, "score", 0),
+                "num_comments": getattr(submission, "num_comments", 0),
+                "url": f"https://reddit.com{getattr(submission, 'permalink', '')}",
+                "subreddit": str(getattr(submission, "subreddit", "")),
+                "id": getattr(submission, "id", ""),
                 "upvote_ratio": getattr(submission, "upvote_ratio", None),
-                "is_self": submission.is_self,
-                "domain": submission.domain,
+                "is_self": getattr(submission, "is_self", False),
+                "domain": getattr(submission, "domain", ""),
                 "thumbnail": getattr(submission, "thumbnail", ""),
                 "link_flair_text": getattr(submission, "link_flair_text", ""),
                 "gilded": getattr(submission, "gilded", 0)
@@ -308,9 +312,9 @@ class RedditScraper(BaseScraper):
             return pd.DataFrame()
         
         try:
-            subreddit = self.reddit.subreddit(subreddit_name)
+            subreddit = await self.reddit.subreddit(subreddit_name)
             posts = []
-            
+
             if sort == "hot":
                 submissions = subreddit.hot(limit=limit)
             elif sort == "new":
@@ -321,8 +325,8 @@ class RedditScraper(BaseScraper):
                 submissions = subreddit.rising(limit=limit)
             else:
                 submissions = subreddit.hot(limit=limit)
-            
-            for submission in submissions:
+
+            async for submission in submissions:
                 post_data = self._extract_post_data(submission)
                 posts.append(post_data)
             
