@@ -325,7 +325,11 @@ def render_search_results():
         """, unsafe_allow_html=True)
     
     with col4:
-        avg_score = df['score'].mean() if 'score' in df.columns and not df['score'].isna().all() else 0
+        if 'score' in df.columns and not df['score'].isna().all():
+            clean_scores = pd.to_numeric(df['score'], errors='coerce').dropna()
+            avg_score = clean_scores.mean() if len(clean_scores) > 0 else 0
+        else:
+            avg_score = 0
         st.markdown(f"""
         <div class="metric-card">
             <h3 style="margin:0; color:#8b5cf6;">Avg Score</h3>
@@ -394,12 +398,17 @@ def render_search_results():
     
     with filter_col2:
         if 'score' in df.columns and not df['score'].isna().all():
-            min_score = st.slider(
-                "Minimum score",
-                min_value=int(df['score'].min()),
-                max_value=int(df['score'].max()),
-                value=int(df['score'].min())
-            )
+            # Clean the score column - remove NaN and ensure numeric values
+            clean_scores = pd.to_numeric(df['score'], errors='coerce').dropna()
+            if len(clean_scores) > 0:
+                min_score = st.slider(
+                    "Minimum score",
+                    min_value=int(clean_scores.min()),
+                    max_value=int(clean_scores.max()),
+                    value=int(clean_scores.min())
+                )
+            else:
+                min_score = None
         else:
             min_score = None
     
@@ -550,20 +559,26 @@ def render_analytics():
     
     # Score distribution
     if 'score' in df.columns and not df['score'].isna().all():
-        st.subheader("⭐ Score Distribution")
-        
-        fig = px.histogram(
-            df,
-            x='score',
-            nbins=20,
-            title='Distribution of Post Scores',
-            labels={'score': 'Score', 'count': 'Number of Posts'}
-        )
-        fig.update_layout(
-            xaxis_title="Score",
-            yaxis_title="Number of Posts"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        # Clean the score data for visualization
+        clean_scores = pd.to_numeric(df['score'], errors='coerce').dropna()
+        if len(clean_scores) > 0:
+            st.subheader("⭐ Score Distribution")
+            
+            # Create a temporary dataframe with clean scores
+            score_df = pd.DataFrame({'score': clean_scores})
+            
+            fig = px.histogram(
+                score_df,
+                x='score',
+                nbins=20,
+                title='Distribution of Post Scores',
+                labels={'score': 'Score', 'count': 'Number of Posts'}
+            )
+            fig.update_layout(
+                xaxis_title="Score",
+                yaxis_title="Number of Posts"
+            )
+            st.plotly_chart(fig, use_container_width=True)
     
     # Word cloud-like analysis (top terms)
     st.subheader("🔤 Popular Terms")
