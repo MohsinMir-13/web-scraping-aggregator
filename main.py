@@ -15,7 +15,7 @@ from pathlib import Path
 def run_streamlit_app():
     """Launch the Streamlit web application."""
     print("🕷️ Starting Web Scraping Aggregator...")
-    print("🌐 Opening web interface at http://localhost:8501")
+    print("🌐 Opening web interface at '")
     
     try:
         subprocess.run([
