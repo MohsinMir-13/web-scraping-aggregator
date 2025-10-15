@@ -35,6 +35,7 @@ tqdm>=4.66.0
 python-dateutil>=2.8.2
 urllib3>=2.0.0
 watchdog>=6.0.0  # File system watching for faster Streamlit reloads
+feedparser>=6.0.11
 
 # Development and testing
 pytest>=7.4.0

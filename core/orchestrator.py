@@ -8,7 +8,7 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 import time
 
-from scrapers import RedditScraper, GitHubScraper, StackOverflowScraper, ForumScraper
+from scrapers import RedditScraper, ForumScraper, NewsScraper, ClassifiedsScraper, SuppliersScraper
 from utils.data_utils import DataNormalizer, merge_dataframes
 from utils.logging_utils import get_logger
 from config.settings import SCRAPING_CONFIG, DATA_SOURCES
@@ -21,9 +21,10 @@ class ScrapingOrchestrator:
     def __init__(self):
         self.scrapers = {
             "reddit": RedditScraper(),
-            "github": GitHubScraper(), 
-            "stackoverflow": StackOverflowScraper(),
-            "forums": ForumScraper()
+            "forums": ForumScraper(),
+            "news": NewsScraper(),
+            "classifieds": ClassifiedsScraper(),
+            "suppliers": SuppliersScraper()
         }
         self.normalizer = DataNormalizer()
         self.results_cache = {}

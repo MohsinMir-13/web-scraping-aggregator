@@ -202,31 +202,52 @@ def render_sidebar():
             help="Optional: extend the construction/roofing focused subreddit list."
         )
         
-        st.write("**GitHub Options**")
-        github_repos = st.text_input(
-            "Specific repositories (comma-separated)",
-            placeholder="construction-tools,roofing-calc", 
-            help="Format: owner/repo. Leave empty for global construction project search"
-        )
-        
-        github_type = st.selectbox(
-            "GitHub search type",
-            ["issues", "repositories"],
-            help="Type of GitHub content to search"
-        )
-        
-        st.write("**Stack Overflow Options**")
-        so_tags = st.text_input(
-            "Stack Overflow tags (comma-separated)",
-            placeholder="construction,cad,architecture,building",
-            help="Filter by construction/architecture related tags"
-        )
+        # Tech sources (GitHub/StackOverflow) removed to focus on construction & roofing sources
         
         st.write("**Forum Options**")
         forum_urls = st.text_area(
             "Forum URLs (one per line)",
             placeholder="https://www.contractortalk.com\nhttps://www.diychatroom.com",
             help="URLs of construction/roofing forums to search"
+        )
+
+        st.write("**News / RSS Options**")
+        news_region = st.text_input(
+            "News region (ISO code)",
+            value="lv",
+            help="Bias Google News results to a country/region, e.g., lv, ee, lt"
+        )
+        news_language = st.selectbox(
+            "News language",
+            ["lv", "en"],
+            index=0,
+            help="Preferred language for Google News feed"
+        )
+        news_custom_feeds = st.text_area(
+            "Custom RSS feeds (one per line)",
+            placeholder="https://www.lsm.lv/rss/\nhttps://www.baltictimes.com/rss/",
+            help="Add any RSS feeds to include in search"
+        )
+
+        st.write("**Classifieds (SS.com) Options**")
+        classifieds_region = st.selectbox(
+            "Region",
+            ["riga", "riga_region", "vidzeme", "kurzeme", "latgale", "zemgale", "ventspils", "liepaja", "jelgava", "daugavpils", "jekabpils", "jurmala", "valmiera", "rezekne", "ogre"],
+            index=0,
+            help="Region to bias results (used in tags)."
+        )
+        classifieds_category = st.text_input(
+            "Category path (advanced)",
+            value="services/search/",
+            help="Advanced: SS.com category path to target. Default searches all."
+        )
+
+        st.write("**Suppliers Options**")
+        suppliers_sites = st.multiselect(
+            "Suppliers",
+            ["K-Senukai", "Stokker"],
+            default=["K-Senukai", "Stokker"],
+            help="Which supplier catalogs to include."
         )
     
     return {
@@ -242,15 +263,21 @@ def render_sidebar():
                 "curated_only": reddit_curated_only,
                 "extra_curated": [c.strip() for c in extra_curated.split(',') if c.strip()] if extra_curated else []
             },
-            "github": {
-                "repositories": [r.strip() for r in github_repos.split(",") if r.strip()] if github_repos else None,
-                "search_type": github_type
-            },
-            "stackoverflow": {
-                "tags": [t.strip() for t in so_tags.split(",") if t.strip()] if so_tags else None
-            },
+            # GitHub and StackOverflow removed
             "forums": {
                 "forum_urls": [url.strip() for url in forum_urls.split("\n") if url.strip()] if forum_urls else None
+            },
+            "news": {
+                "region": news_region.strip() if news_region else "lv",
+                "language": news_language,
+                "custom_feeds": [f.strip() for f in news_custom_feeds.split("\n") if f.strip()] if news_custom_feeds else None
+            },
+            "classifieds": {
+                "region": classifieds_region,
+                "category": classifieds_category,
+            },
+            "suppliers": {
+                "sites": suppliers_sites
             }
         }
     }

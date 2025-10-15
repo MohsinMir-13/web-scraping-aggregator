@@ -85,9 +85,10 @@ STREAMLIT_CONFIG = {
 # Supported data sources
 DATA_SOURCES = {
     "reddit": "Reddit",
-    "github": "GitHub Issues/Discussions", 
-    "stackoverflow": "Stack Overflow",
-    "forums": "Generic Forums"
+    "forums": "Generic Forums",
+    "news": "News / RSS",
+    "classifieds": "Classifieds (SS.com)",
+    "suppliers": "Suppliers / Materials"
 }
 
 # Default forum URLs for scraping - Construction, Roofing, Latvia focused

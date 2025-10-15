@@ -1,4 +1,28 @@
 """
+Stub GitHub scraper. Placeholder that returns no results but keeps the app stable.
+You can replace this with a real implementation using GitHub's search API via PyGithub.
+"""
+from typing import Any
+import pandas as pd
+
+from scrapers.base_scraper import BaseScraper
+from utils.logging_utils import get_logger
+
+logger = get_logger(__name__)
+
+
+class GitHubScraper(BaseScraper):
+    def __init__(self):
+        super().__init__("github")
+
+    def validate_config(self) -> bool:
+        # Mark as not fully configured to show a warning badge in UI
+        return False
+
+    async def search(self, query: str, limit: int = 50, days_back: int = 30, **kwargs) -> pd.DataFrame:
+        logger.warning("GitHubScraper is a stub and returns no results. Implement API-based search to enable.")
+        return pd.DataFrame()
+"""
 GitHub scraper using the GitHub REST API.
 """
 import asyncio

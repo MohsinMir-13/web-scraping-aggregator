@@ -1,4 +1,27 @@
 """
+Stub StackOverflow scraper. Placeholder that returns no results.
+Replace with an implementation that uses Stack Exchange API or HTML search.
+"""
+from typing import Any
+import pandas as pd
+
+from scrapers.base_scraper import BaseScraper
+from utils.logging_utils import get_logger
+
+logger = get_logger(__name__)
+
+
+class StackOverflowScraper(BaseScraper):
+    def __init__(self):
+        super().__init__("stackoverflow")
+
+    def validate_config(self) -> bool:
+        return False
+
+    async def search(self, query: str, limit: int = 50, days_back: int = 30, **kwargs) -> pd.DataFrame:
+        logger.warning("StackOverflowScraper is a stub and returns no results. Implement API/HTML search to enable.")
+        return pd.DataFrame()
+"""
 Stack Overflow scraper using the Stack Exchange API.
 """
 import asyncio
