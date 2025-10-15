@@ -108,7 +108,7 @@ def render_header():
     st.markdown('<div class="main-header">🕷️ Web Scraping Aggregator</div>', unsafe_allow_html=True)
     st.markdown("""
     <div style="text-align: center; color: #6b7280; margin-bottom: 2rem;">
-        Collect and analyze discussions from Reddit, GitHub, Stack Overflow, and forums
+        Construction & Roofing Intelligence for Latvia - Search discussions from Reddit, GitHub, forums, and more
     </div>
     """, unsafe_allow_html=True)
 
@@ -124,8 +124,8 @@ def render_sidebar():
     query = st.sidebar.text_input(
         "Search Query",
         value=st.session_state.last_query,
-        placeholder="Enter your search topic...",
-        help="Enter keywords or phrases to search across selected sources"
+        placeholder="e.g., flat roof repair Latvia, metal roofing Riga...",
+        help="Enter construction/roofing topics, materials, locations, or contractor questions"
     )
     
     # Data source selection
@@ -174,8 +174,8 @@ def render_sidebar():
         st.write("**Reddit Options**")
         reddit_subreddits = st.text_input(
             "Specific subreddits (comma-separated)",
-            placeholder="python,javascript,webdev",
-            help="Leave empty to search all of Reddit"
+            placeholder="Construction,Roofing,HomeImprovement,latvia",
+            help="Leave empty to search construction/roofing/Latvia subreddits"
         )
         
         reddit_sort = st.selectbox(
@@ -191,22 +191,22 @@ def render_sidebar():
         )
 
         reddit_curated_only = st.checkbox(
-            "Limit to curated tech subreddits only",
+            "Limit to curated construction subreddits only",
             value=False,
-            help="If enabled, skips r/all and only searches a fixed curated list (python, programming, technology, etc.)."
+            help="If enabled, skips r/all and only searches construction/roofing/Latvia subreddits."
         )
 
         extra_curated = st.text_input(
             "Additional curated subreddits (extend internal list)",
-            placeholder="travel, cooking, health",
-            help="Optional: extend the internal curated list used when no explicit subreddits provided."
+            placeholder="architecture, DIY, Latvia",
+            help="Optional: extend the construction/roofing focused subreddit list."
         )
         
         st.write("**GitHub Options**")
         github_repos = st.text_input(
             "Specific repositories (comma-separated)",
-            placeholder="microsoft/vscode,facebook/react", 
-            help="Format: owner/repo. Leave empty for global search"
+            placeholder="construction-tools,roofing-calc", 
+            help="Format: owner/repo. Leave empty for global construction project search"
         )
         
         github_type = st.selectbox(
@@ -218,15 +218,15 @@ def render_sidebar():
         st.write("**Stack Overflow Options**")
         so_tags = st.text_input(
             "Stack Overflow tags (comma-separated)",
-            placeholder="python,javascript,react",
-            help="Filter by specific programming tags"
+            placeholder="construction,cad,architecture,building",
+            help="Filter by construction/architecture related tags"
         )
         
         st.write("**Forum Options**")
         forum_urls = st.text_area(
             "Forum URLs (one per line)",
-            placeholder="https://forum.example.com\nhttps://discuss.example.org",
-            help="URLs of forums to search"
+            placeholder="https://www.contractortalk.com\nhttps://www.diychatroom.com",
+            help="URLs of construction/roofing forums to search"
         )
     
     return {

@@ -1,16 +1,18 @@
-# 🕷️ Web Scraping Aggregator
+# 🏗️ Construction & Roofing Intelligence Platform
 
-A comprehensive web scraping and aggregation tool with a modern Streamlit interface that collects discussions and posts from multiple online sources including Reddit, GitHub Issues/Discussions, Stack Overflow, and generic forums.
+A specialized web scraping and aggregation tool for the construction and roofing industry in Latvia. Features a modern Streamlit interface that collects discussions, project insights, and professional knowledge from Reddit, GitHub, Stack Overflow, and construction forums.
 
 ## ✨ Features
 
-- **Multi-Source Scraping**: Collect data from Reddit, GitHub, Stack Overflow, and generic forums
+- **Construction-Focused**: Curated sources for roofing, building, and construction discussions
+- **Latvia Market Intelligence**: Integrated Latvia-specific forums and location-aware search
+- **Multi-Source Scraping**: Collect data from Reddit (Construction, Roofing, HomeImprovement), GitHub construction projects, Stack Overflow, and contractor forums
 - **Modern Web Interface**: Clean, responsive Streamlit dashboard with interactive visualizations
 - **Concurrent Processing**: Fast, asynchronous scraping across multiple sources
 - **Data Normalization**: Standardized output format across all sources
 - **Advanced Filtering**: Filter results by source, date, score, and keywords
-- **Export Functionality**: Download results in CSV or JSON format
-- **Real-time Analytics**: Interactive charts and insights
+- **Export Functionality**: Download results in CSV or JSON format for contractor reports
+- **Real-time Analytics**: Interactive charts and insights about construction trends
 - **Rate Limiting**: Respects robots.txt and implements intelligent rate limiting
 - **Configurable Sources**: Support for API keys and advanced source-specific options
 

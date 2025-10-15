@@ -339,12 +339,12 @@ class ScrapingOrchestrator:
                 combo = " ".join(query_words[i:i+2])
                 suggestions.append(f'"{combo}"')
         
-        # Add common technical terms only if the query appears technical (heuristic)
-        technical_indicators = {"api", "python", "java", "error", "bug", "framework", "code", "library"}
+        # Add common construction/roofing terms if the query appears related (heuristic)
+        construction_indicators = {"roof", "construction", "building", "contractor", "repair", "install", "material", "Latvia", "Riga"}
         query_tokens = set(query_words)
-        if query_tokens & technical_indicators:
-            tech_terms = ["API", "framework", "library", "tutorial", "error", "bug", "fix"]
-            for term in tech_terms:
+        if query_tokens & construction_indicators:
+            construction_terms = ["Latvia", "Riga", "contractor", "installation", "repair", "materials", "cost"]
+            for term in construction_terms:
                 if term.lower() not in query.lower():
                     suggestions.append(f"{query} {term}")
         

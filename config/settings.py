@@ -90,13 +90,13 @@ DATA_SOURCES = {
     "forums": "Generic Forums"
 }
 
-# Default forum URLs for scraping
+# Default forum URLs for scraping - Construction, Roofing, Latvia focused
 DEFAULT_FORUM_URLS = [
-    "https://forum.djangoproject.com",  # Django forum
-    "https://discuss.python.org",  # Python forum
-    "https://community.rstudio.com",  # RStudio community
-    "https://forums.docker.com",  # Docker forums
-    "https://discourse.jupyter.org"  # Jupyter discourse
+    "https://www.diychatroom.com",  # DIY construction & roofing forum
+    "https://www.contractortalk.com",  # Professional contractor discussions
+    "https://www.building.lv/forums",  # Latvia construction portal (if available)
+    "https://forums.jlconline.com",  # Journal of Light Construction
+    "https://www.city-data.com/forum/latvia"  # Latvia general discussions
 ]
 
 # Standard field mapping for normalization

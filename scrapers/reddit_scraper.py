@@ -151,7 +151,7 @@ class RedditScraper(BaseScraper):
                     except Exception as e:
                         self.logger.warning(f"Error searching subreddit {subreddit_name}: {e}")
             else:
-                base_curated = ['python', 'programming', 'learnpython', 'technology', 'datascience', 'webdev', 'javascript']
+                base_curated = ['Construction', 'Roofing', 'HomeImprovement', 'Carpentry', 'europe', 'latvia', 'architecture']
                 # Merge and dedupe curated lists
                 curated_subs = []
                 for name in base_curated + extra_curated:
